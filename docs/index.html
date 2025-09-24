@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wahlkreis 15 – Satellitenkarte</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <style>
+    html, body {
+      height:100%;
+      margin:0;
+      background:#0b1220;
+      color:#e5e7eb;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto;
+    }
+    #map { height:100vh; width:100vw; }
+    .legend {
+      position:absolute; right:12px; bottom:12px; z-index:1000;
+      background:rgba(17,24,39,.88); color:#e5e7eb; padding:10px 12px;
+      border-radius:12px; border:1px solid #334155; box-shadow:0 8px 24px rgba(0,0,0,.35);
+      font-size:14px; line-height:1.25; backdrop-filter:blur(4px);
+    }
+    .legend .row { display:flex; align-items:center; gap:8px; margin:6px 0; }
+    .dot { width:14px; height:14px; border-radius:50%; display:inline-block; border:2px solid #0b1220; box-shadow:0 0 0 1px rgba(255,255,255,.15) inset; }
+    .dot.wk { background:#d61f26; }
+    .dot.city { background:#2166f3; }
+  </style>
+</head>
+<body>
+  <div id="map" role="region" aria-label="Interaktive Karte Wahlkreis 15"></div>
+  <div class="legend">
+    <div class="row"><span class="dot wk"></span> WK-Büro</div>
+    <div class="row"><span class="dot city"></span> Stadt</div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://unpkg.com/shpjs@4.0.4/dist/shp.min.js"></script>
+  <script>
+    // Wahlkreisbüros
+    const WK_BUEROS = [
+      { "name": "Wahlkreisbüro Stralsund", "lat": 54.310844, "lng": 13.087019, "adresse": "Tribseer Straße 20, 18439 Stralsund", "url": "https://www.georgguenther.de/kontakt" },
+      { "name": "Wahlkreisbüro Greifswald", "lat": 54.09582, "lng": 13.38067, "adresse": "Markt 1, 17489 Greifswald (CDU Vorpommern-Greifswald)", "url": "https://www.georgguenther.de/kontakt" },
+      { "name": "Wahlkreisbüro Ribnitz-Damgarten","lat": 54.241067, "lng": 12.431875, "adresse": "Im Kloster 11, 18311 Ribnitz-Damgarten (CDU KV Vorpommern-Rügen)", "url": "https://www.georgguenther.de/kontakt" },
+      { "name": "Wahlkreisbüro Grimmen","lat": 54.11165, "lng": 13.03859, "adresse": "Bahnhofstraße 48, 18507 Grimmen (CDU KV Vorpommern-Rügen)", "url": "https://www.georgguenther.de/kontakt" }
+    ];
+
+    // Städte
+    const STAEDTE = [
+      { "name": "Stralsund", "lat": 54.313889, "lng": 13.089722, "einwohner": 54094 },
+      { "name": "Greifswald", "lat": 54.095833, "lng": 13.381111, "einwohner": 56092 },
+      { "name": "Ribnitz-Damgarten", "lat": 54.25, "lng": 12.466667, "einwohner": 15333 },
+      { "name": "Grimmen", "lat": 54.111, "lng": 13.041389, "einwohner": 9076 },
+      { "name": "Bergen auf Rügen", "lat": 54.416667, "lng": 13.433333, "einwohner": 13457 }
+    ];
+
+    // Karte initialisieren
+    const map = L.map('map', { zoomControl:true, worldCopyJump:false });
+
+    // Satelliten-Basiskarte (Esri World Imagery)
+    const imagery = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { attribution:'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics', noWrap:true }
+    ).addTo(map);
+
+    // --- Shapefile laden ---
+    shp('./wk15.shp')
+      .then(geo => {
+        const fc = (geo && geo.type === 'FeatureCollection') ? geo : { type: 'FeatureCollection', features: [geo] };
+        const sel = {
+          type: 'FeatureCollection',
+          features: fc.features.filter(f => {
+            const p = f.properties || {};
+            const v = p.WKR_NR ?? p.WK_NR ?? p.WKNR ?? p.WKR_Nr ?? p.WKNR_ ?? p.NR ?? p.Nummer;
+            return String(v) === '15' || Number(v) === 15;
+          })
+        };
+
+        if (!sel.features.length) {
+          console.error('Kein Feature mit Wahlkreisnummer 15 gefunden. Beispiel-Properties:', fc.features[0]?.properties);
+        }
+
+        renderMap(sel);
+      })
+      .catch(err => console.error('Shapefile konnte nicht geladen werden:', err));
+
+    // --- Karte mit Wahlkreis rendern ---
+    function renderMap(WK_GRENZE) {
+      const wkBoundaryLayer = L.geoJSON(WK_GRENZE, {
+        style: { color:'#93c5fd', weight:2, opacity:0.9, fillOpacity:0 }
+      }).addTo(map);
+
+      // Marker
+      const icon = fill => L.divIcon({
+        className:'',
+        html:`<svg width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="8" fill="${fill}" stroke="white" stroke-width="3"/></svg>`,
+        iconSize:[28,28], iconAnchor:[14,14]
+      });
+
+      const layerWK = L.layerGroup(WK_BUEROS.map(p =>
+        L.marker([p.lat,p.lng],{icon:icon('#d61f26')})
+          .bindPopup(`<b>${p.name}</b><div>${p.adresse||''}</div><div><a href="${p.url}" target="_blank">Weitere Infos</a></div>`)
+      )).addTo(map);
+
+      const layerCity = L.layerGroup(STAEDTE.map(s =>
+        L.marker([s.lat,s.lng],{icon:icon('#2166f3')})
+          .bindPopup(`<b>${s.name}</b><div>Einwohner: ${s.einwohner.toLocaleString('de-DE')}</div>`)
+      )).addTo(map);
+
+      // Maskierung außerhalb des Wahlkreises
+      function lngLatToLatLng(ring){ return ring.map(pt => [pt[1], pt[0]]); }
+      function collectOuterRings(geojson){
+        const rings=[]; const addPoly=coords=>{ if(coords&&coords.length) rings.push(lngLatToLatLng(coords[0])); };
+        if(!geojson) return rings;
+        if (geojson.type==='FeatureCollection') geojson.features.forEach(f=>{
+          const g=f.geometry; if(!g) return;
+          if (g.type==='Polygon') addPoly(g.coordinates);
+          if (g.type==='MultiPolygon') g.coordinates.forEach(addPoly);
+        });
+        else if (geojson.type==='Feature') {
+          const g=geojson.geometry;
+          if (g.type==='Polygon') addPoly(g.coordinates);
+          if (g.type==='MultiPolygon') g.coordinates.forEach(addPoly);
+        }
+        else if (geojson.type==='Polygon') addPoly(geojson.coordinates);
+        else if (geojson.type==='MultiPolygon') geojson.coordinates.forEach(addPoly);
+        return rings;
+      }
+
+      const wkRings = collectOuterRings(WK_GRENZE);
+      const worldRing = [[-85,-180],[-85,180],[85,180],[85,-180]];
+
+      L.polygon([worldRing, ...wkRings], {
+        stroke:false, fillColor:'#000', fillOpacity:0.45, fillRule:'evenodd', interactive:false
+      }).addTo(map);
+
+      // Auf Wahlkreis zoomen + Begrenzen
+      const wkBounds = wkBoundaryLayer.getBounds();
+      map.fitBounds(wkBounds.pad(0.1));
+      map.setMaxBounds(wkBounds.pad(0.5));
+      map.options.maxBoundsViscosity = 1.0;
+      map.options.minZoom = map.getZoom() - 1;
+    }
+  </script>
+</body>
+</html>

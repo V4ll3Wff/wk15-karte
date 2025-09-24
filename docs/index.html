@@ -63,8 +63,7 @@
     ).addTo(map);
 
     // --- Shapefile laden ---
-   const FILE = 'wk15.shp';
-const shpUrl = new URL(FILE, document.baseURI).href;
+   const shpUrl = 'https://V4ll3Wff.github.io/wk15-karte/wk15.shp'; // exakt so
 shp(shpUrl)
       .then(geo => {
         const fc = (geo && geo.type === 'FeatureCollection') ? geo : { type: 'FeatureCollection', features: [geo] };

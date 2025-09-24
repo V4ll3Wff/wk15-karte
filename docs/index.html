@@ -63,7 +63,9 @@
     ).addTo(map);
 
     // --- Shapefile laden ---
-    shp('./wk15.shp')
+   const FILE = 'wk15.shp';
+const shpUrl = new URL(FILE, document.baseURI).href;
+shp(shpUrl)
       .then(geo => {
         const fc = (geo && geo.type === 'FeatureCollection') ? geo : { type: 'FeatureCollection', features: [geo] };
         const sel = {
